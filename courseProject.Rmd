@@ -1,0 +1,119 @@
+---
+title: "Predicting how well a task is performed"
+author: "Marco Tizzoni"
+date: "21 May 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(ggplot2)
+library(rpart)
+```
+
+# Executive Summary
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this study we build a model for predicting that.
+
+
+# Exploratory Data Analysis
+In this section we explore the original datasets available here:
+
+ - https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+ - https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+## Data manipulation
+In this section we describe the manipulation we did on the data. First, we set the seed for reproducible results and then read the data.
+
+```{r cache=TRUE}
+set.seed(1234)
+
+# Read data
+training <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing  <- read.csv("pml-testing.csv",  na.strings=c("NA","#DIV/0!",""))
+```
+
+Columns 1 to 7 can be taken out as they are not predictors:
+```{r warning=FALSE, message=FALSE, echo=FALSE, cache=TRUE}
+myDataset <- training[,8:length(training)]
+testing   <- testing[,8:length(testing)]
+```
+
+Since many columns reports NA values we would like to know if we can take them out and reduce the set of predictors.
+```{r warning=FALSE, message=FALSE, cache=TRUE}
+na_perc <- sapply(myDataset, function(x) sum(is.na(x))/nrow(myDataset) )
+qplot(seq_along(na_perc), na_perc, colour=na_perc) + 
+  labs(title="Distribution of NAs", x="Predictor", y="% of NAs")
+```
+
+The plot above shows that NAs are accumulated on a number of columns, those columns are almost completely filled with NAs. The remaining columns, on the contrary, are pretty much filled with values. We are going to remove the former since they will not contribute significately to the model.
+
+```{r warning=FALSE, message=FALSE, cache=TRUE}
+myDataset <- myDataset[,na_perc < 0.9]
+testing   <- testing[,na_perc < 0.9]
+```
+
+# Model building
+To build and test our model we partition the training dataset and use 75% of the data for training and 25% for testing.
+
+```{r warning=FALSE, message=FALSE, cache=TRUE}
+inTrain   <- createDataPartition(myDataset$classe, p = 3/4)[[1]]
+myTraining <- myDataset[ inTrain,]
+myTesting  <- myDataset[-inTrain,]
+```
+
+## Testing different methods
+In this section we test different methods and choose the one that performs better. Since we have a big number of predictors and methods like random forests are compute intensive, to reduce the computation time we use only 1%of the training set to get an idea of which method could work well.
+
+```{r warning=FALSE, message=FALSE, cache=TRUE}
+# fit models
+inTrain  <- createDataPartition(myDataset$classe, p = 1/100)[[1]]
+myTraining <- myDataset[ inTrain,]
+
+fit <- rpart(myTraining$classe ~ ., data = myTraining,  method="class")
+pre <- predict(fit, newdata = myTesting, type = "class")
+
+fit1 <- train(classe ~ ., data = myTraining,  method = "rf")
+pre1 <- predict(fit1, myTesting)
+
+fit2 <- train(classe ~ ., data = myTraining, method = "gbm", verbose = FALSE)
+pre2 <- predict(fit2, myTesting)
+
+# Accuracy
+sum(pre  == myTesting$classe) / length(pre)
+sum(pre1 == myTesting$classe) / length(pre1)
+sum(pre2 == myTesting$classe) / length(pre2)
+```
+
+Above the values of the accurancy for the Recursive Partitioning and Regression Trees, the Random Forest method and the Generalized Boosted Model. Random Forest and the Generalized Boosted Model perform both well. We are going to use the former that looks performing a bit better.
+
+# Validity of the model
+
+```{r warning=FALSE, message=FALSE, cache=TRUE}
+# fit models
+inTrain  <- createDataPartition(myDataset$classe, p = 3/4)[[1]]
+myTraining <- myDataset[ inTrain,]
+
+fit1 <- train(classe ~ ., data = myTraining,  method = "rf")
+pre1 <- predict(fit1, myTesting)
+
+# Accuracy
+acc <- sum(pre1 == myTesting$classe) / length(pre1)
+```
+
+Increasing the size of the training set has pushed accuracy to `r acc` that is a very good value. 
+
+The following confusion matrix shows some key facts about our model:
+
+```{r}
+confusionMatrix(pre1, myTesting$classe)
+```
+
+This model hence performs well and we can run a prediction on the final testing set.
+
+```{r}
+predict(fit1, testing)
+```
+
