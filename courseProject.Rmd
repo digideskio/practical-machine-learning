@@ -107,13 +107,13 @@ Increasing the size of the training set has pushed accuracy to `r acc` that is a
 
 The following confusion matrix shows some key facts about our model:
 
-```{r}
+```{r warning=FALSE, message=FALSE, cache=TRUE}
 confusionMatrix(pre1, myTesting$classe)
 ```
 
 This model hence performs well and we can run a prediction on the final testing set.
 
-```{r}
+```{r warning=FALSE, message=FALSE, cache=TRUE}
 predict(fit1, testing)
 ```
 
